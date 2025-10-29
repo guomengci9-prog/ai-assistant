@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    /* 基本选项 */
+    "target": "ESNext",                      /* 编译后的 JavaScript 版本 */
+    "module": "ESNext",                      /* 使用 ESNext 模块 */
+    "moduleResolution": "Node",              /* 模块解析方式 */
+    "lib": ["ESNext", "DOM"],                /* 包含的库 */
+
+    /* Vue 与 JSX/TSX */
+    "jsx": "preserve",                        /* 保留 JSX，用 Vue 处理 */
+    "esModuleInterop": true,                  /* 允许默认导入 CommonJS 模块 */
+    "allowSyntheticDefaultImports": true,    
+
+    /* 严格模式 */
+    "strict": true,                           /* 启用所有严格检查 */
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,                     /* 跳过库文件类型检查 */
+
+    /* 输出控制 */
+    "sourceMap": true,
+    "noEmit": true,                           /* Vite 会处理编译输出 */
+
+    /* 路径别名 */
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"]
+    },
+
+    /* 增强类型推断 */
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue"
+  ],
+
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
