@@ -1,106 +1,121 @@
 <template>
-  <div class="login-page">
-    <div class="login-card">
-      <h2>登录</h2>
-      <el-input v-model="username" placeholder="用户名" />
-      <el-input v-model="password" type="password" placeholder="密码" />
-      <el-button type="primary" @click="loginHandler" class="btn">登录</el-button>
-      <el-button @click="registerHandler" class="btn">注册</el-button>
+  <div class="auth-page">
+    <div class="auth-card">
+      <h2 class="title">登录</h2>
+
+      <el-input
+        :key="'account-' + $route.fullPath"
+        v-model="account"
+        placeholder="用户名/邮箱/手机号"
+        autocomplete="off"
+        class="input"
+      />
+
+      <el-input
+        :key="'password-' + $route.fullPath"
+        v-model="password"
+        type="password"
+        placeholder="密码"
+        autocomplete="new-password"
+        class="input"
+      />
+
+      <el-button type="primary" @click="loginHandler" class="btn primary-btn">登录</el-button>
+
+      <p class="switch-link" @click="goRegister">没有账号？去注册</p>
+      <p class="switch-link" @click="goForgotPassword">忘记密码？</p>
+
       <p v-if="error" class="error-msg">{{ error }}</p>
     </div>
   </div>
 </template>
 
-<script lang="ts" setup>
-import { ref } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { login, register } from '../api'
+import { login, LoginData } from '../api'
 
 const router = useRouter()
-const username = ref('')
+const account = ref('')
 const password = ref('')
 const error = ref('')
 
+onMounted(() => {
+  account.value = ''
+  password.value = ''
+  error.value = ''
+})
+
 async function loginHandler() {
   try {
-    const res = await login(username.value, password.value)
+    const data: LoginData = { account: account.value, password: password.value }
+    const res = await login(data)
     if (res.data.success) {
       router.push('/assistants')
     } else {
       error.value = res.data.message
     }
-  } catch (e) {
+  } catch {
     error.value = '登录失败，请稍后重试'
   }
 }
 
-async function registerHandler() {
-  try {
-    const res = await register(username.value, password.value)
-    if (res.data.success) {
-      error.value = '注册成功，请登录'
-    } else {
-      error.value = res.data.message
-    }
-  } catch (e) {
-    error.value = '注册失败'
-  }
-}
+const goRegister = () => router.push('/register')
+const goForgotPassword = () => router.push('/forgot-password')
 </script>
 
 <style scoped>
-/* 整体页面居中 */
-.login-page {
+.auth-page {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: #f0f0f0;
+  background: #f5f6fa;
 }
-
-/* 登录卡片 */
-.login-card {
+.auth-card {
   width: 100%;
-  max-width: 360px; /* 模拟手机宽度 */
-  padding: 30px 20px;
+  max-width: 360px;
+  padding: 28px 22px;
   background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
 }
-
-/* 标题居中 */
-.login-card h2 {
+.title {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  font-weight: 600;
+  font-size: 20px;
 }
-
-/* 输入框间距 */
-.login-card .el-input {
-  margin-bottom: 15px;
+.input {
+  margin-bottom: 14px;
 }
-
-/* 按钮样式 */
-.login-card .btn {
-  margin-bottom: 10px;
+.btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px;
+  font-size: 15px;
+  border-radius: 10px;
+  transition: .2s;
 }
-
-/* 错误提示 */
+.primary-btn:hover {
+  filter: brightness(0.95);
+}
+.switch-link {
+  text-align: center;
+  margin-top: 12px;
+  color: #409eff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.switch-link:hover {
+  text-decoration: underline;
+}
 .error-msg {
   color: red;
   text-align: center;
   margin-top: 10px;
-}
-
-/* 响应式调整，小屏幕撑满 */
-@media (max-width: 400px) {
-  .login-card {
-    max-width: 100%;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 20px 10px;
-  }
+  font-size: 13px;
 }
 </style>

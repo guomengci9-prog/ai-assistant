@@ -1,10 +1,15 @@
 <template>
-  <router-view />
+  <router-view :key="$route.fullPath" />
 </template>
 
-<script setup>
+<script setup lang="ts">
 </script>
 
 <style>
-/* 全局布局可以放这里或 main.css，根据你后续习惯设置 */
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  background: #f5f6fa;
+}
 </style>

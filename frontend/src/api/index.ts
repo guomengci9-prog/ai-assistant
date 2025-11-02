@@ -1,12 +1,42 @@
 import axios from 'axios'
+
+// 全局 baseURL
 axios.defaults.baseURL = 'http://127.0.0.1:8000/api'
 
-export const register = (username: string, password: string, email?: string) =>
-  axios.post('/register', { username, password, email })
+// ================= 登录 =================
+export interface LoginData {
+  account: string
+  password: string
+}
+export const login = (data: LoginData) => axios.post('/login', data)
 
-export const login = (username: string, password: string) =>
-  axios.post('/login', { username, password })
+// ================= 注册 =================
+export interface RegisterData {
+  username: string
+  password: string
+  email?: string
+  phone?: string
+}
+export const register = (data: RegisterData) => axios.post('/register', data)
 
+// ================= 忘记密码 =================
+// account 可以是邮箱或手机号
+export interface ForgotPasswordData {
+  account: string
+}
+export const forgotPassword = (data: ForgotPasswordData) =>
+  axios.post('/forgot-password', data)
+
+// ================= 重置密码 =================
+export interface ResetPasswordData {
+  account: string
+  code: string
+  new_password: string
+}
+export const resetPassword = (data: ResetPasswordData) =>
+  axios.post('/reset-password', data)
+
+// ================= 助手与聊天 API =================
 export const getAssistants = () => axios.get('/assistants')
 export const getAssistantById = (id: number) => axios.get(`/assistants/${id}`)
 

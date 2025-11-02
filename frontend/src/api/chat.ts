@@ -9,8 +9,14 @@ export interface ChatRecord {
   content: string
 }
 
-export const getHistory = (assistant_id: number) =>
-  api.get(`/chat/history/${assistant_id}`)
+//export const getHistory = (assistant_id: number) =>
+  //api.get(`/chat/history/${assistant_id}`)
+
+export const getHistory = (assistantId: number, conversationId: number) =>
+  api.get(`/history/${assistantId}`, {
+    params: { conversationId }
+  })
+
 
 export const sendMessage = (assistant_id: number, msg: string) =>
   api.post(`/chat/${assistant_id}`, { role: "user", content: msg })

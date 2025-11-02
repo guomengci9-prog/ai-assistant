@@ -1,16 +1,33 @@
 <template>
   <div class="app-container assistant-select-page">
     <header class="header">
-      <el-button type="text" @click="back" size="small" class="back-btn">返回登录</el-button>
+      <button class="back-circle-btn" @click="back">
+        <el-icon><ArrowLeft /></el-icon>
+      </button>
       <h2 class="title">请选择一个助手</h2>
     </header>
 
+    <!-- 搜索框 -->
+    <div class="search-wrapper">
+      <el-input
+        v-model="searchKeyword"
+        placeholder="搜索助手..."
+        size="small"
+        clearable
+        class="search-box"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+    </div>
+
     <div class="assistant-list">
       <div v-if="loading" class="loading">加载中，请稍候...</div>
-      <div v-else-if="assistants.length === 0" class="loading">暂无助手</div>
+      <div v-else-if="filteredAssistants.length === 0" class="loading">暂无助手</div>
       <div v-else class="cards">
         <div
-          v-for="assistant in assistants"
+          v-for="assistant in filteredAssistants"
           :key="assistant.id"
           class="assistant-card"
           @click="selectAssistant(assistant.id)"
@@ -25,15 +42,17 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAssistants } from '../api'
+import { ArrowLeft, Search } from '@element-plus/icons-vue'
 
 interface Assistant { id: number; name: string; icon: string; description: string }
 
 const router = useRouter()
 const assistants = ref<Assistant[]>([])
 const loading = ref(true)
+const searchKeyword = ref('')
 
 onMounted(async () => {
   try {
@@ -46,6 +65,13 @@ onMounted(async () => {
   }
 })
 
+const filteredAssistants = computed(() => {
+  if (!searchKeyword.value) return assistants.value
+  return assistants.value.filter(a =>
+    a.name.includes(searchKeyword.value) || a.description.includes(searchKeyword.value)
+  )
+})
+
 function selectAssistant(id: number) {
   router.push(`/chat/${id}`)
 }
@@ -56,112 +82,152 @@ function back() {
 </script>
 
 <style scoped>
-.assistant-select-page {
+/* 主容器 */
+.app-container.assistant-select-page {
+  width: 700px;
+  max-width: 90%;
+  height: 560px;
+  border-radius: 10px;
+  box-shadow: 0 0 15px rgba(0,0,0,0.1);
+  background: #fff;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  height: 100vh;
-  background: #f0f0f0;
-
-  /* 模拟手机竖屏宽度 */
-  max-width: 400px;
-  margin: 0 auto;
-  border-left: 1px solid #ccc;
-  border-right: 1px solid #ccc;
-  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  padding: 12px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* 头部 */
 .header {
   width: 100%;
-  padding: 10px;
+  padding: 8px 10px;
   position: relative;
-  background: #f5f5f5;
   border-bottom: 1px solid #ddd;
   text-align: center;
 }
 
-.header .title {
+.title {
   margin: 0;
   font-size: 18px;
+  font-weight: 600;
 }
 
-/* 返回按钮放在左上角，不遮挡标题 */
-.back-btn {
+/* 圆形返回按钮，保持和聊天页面一致 */
+.back-circle-btn {
   position: absolute;
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #f2f2f2;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: .2s;
 }
 
-/* 助手列表 */
+.back-circle-btn:hover {
+  background: #e8e8e8;
+  transform: translateY(-50%) scale(1.05);
+}
+
+.back-circle-btn:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+/* 搜索框 */
+.search-wrapper {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.search-box {
+  width: 70%;
+  max-width: 320px;
+}
+
+/* 列表滚动区域 */
 .assistant-list {
   flex: 1;
-  width: 100%;
-  padding: 10px;
   overflow-y: auto;
+  display: flex;
+  justify-content: center;
 }
 
-/* 卡片容器 */
+/* 网格布局居中 */
 .cards {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: center;
 }
 
-/* 助手卡片 */
+/* 助手卡片：圆角正方形 */
 .assistant-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  justify-content: center;
+  width: 165px;
+  height: 165px;
+  background: #f7f7f7;
+  border-radius: 14px;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: .18s;
+  padding: 10px;
+  text-align: center;
 }
 
 .assistant-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  transform: translateY(-3px);
+  box-shadow: 0 5px 14px rgba(0,0,0,0.15);
 }
 
-.assistant-card .icon {
-  width: 60px;
-  height: 60px;
-  object-fit: cover;
-  margin-bottom: 10px;
+.icon {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 8px;
 }
 
 .assistant-card h3 {
-  margin: 5px 0;
-  font-size: 16px;
-  text-align: center;
+  margin: 4px 0;
+  font-size: 15px;
+  font-weight: bold;
 }
 
 .assistant-card p {
-  font-size: 14px;
+  font-size: 12.5px;
   color: #666;
-  text-align: center;
+  line-height: 1.25;
   margin: 0;
 }
 
-/* 加载或暂无助手 */
+/* 加载提示 */
 .loading {
   text-align: center;
   margin-top: 20px;
   color: #999;
 }
 
-/* 响应式 */
-@media (max-width: 500px) {
-  .assistant-select-page {
-    max-width: 100%;
-    border-left: none;
-    border-right: none;
-    box-shadow: none;
+/* 移动端适配 */
+@media (max-width: 800px) {
+  .app-container.assistant-select-page {
+    width: 95%;
+    height: 95%;
+  }
+  .assistant-card {
+    width: 44%;
+    height: 140px;
   }
 }
 </style>
