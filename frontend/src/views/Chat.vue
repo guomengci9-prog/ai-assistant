@@ -25,7 +25,7 @@
         <div
           v-for="conv in filteredConversations"
           :key="conv.id"
-          :class="['conversation-item', conv.id === chatStore.currentConversation ? 'active' : '']"
+          :class="['conversation-item', conv.id === chatStore.currentConversationId ? 'active' : '']"
           @click="selectConversation(conv.id)"
         >
           <div class="conv-name">{{ conv.assistantName }}</div>
@@ -87,10 +87,9 @@
 <script lang="ts" setup>
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, ArrowLeft, Search, Delete } from '@element-plus/icons-vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useChatStore } from '@/stores/chat'
-import { getHistory, getAssistantById } from '../api'
+import { getAssistantById, getHistory } from '@/api/chat'
 import type { ChatRecord } from '../types'
 
 const props = defineProps<{ id: number }>()
@@ -102,151 +101,148 @@ const assistantName = ref('')
 const input = ref('')
 const streamingReply = ref('')
 const chatBody = ref<HTMLElement | null>(null)
-const searchKeyword = ref('')
+const searchKeyword = ref('') // 搜索关键字
 
 let ws: WebSocket | null = null
 
-/** 搜索过滤 */
-const filteredConversations = computed(() => {
-  if (!searchKeyword.value) return chatStore.conversations
-  return chatStore.conversations.filter(c =>
-    c.assistantName.includes(searchKeyword.value) ||
-    c.messages.some(m => m.content.includes(searchKeyword.value))
-  )
-})
-
 /** 滚到底部 */
 function scrollToBottom() {
-  nextTick(() => chatBody.value && (chatBody.value.scrollTop = chatBody.value.scrollHeight))
+  nextTick(() => {
+    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight
+  })
 }
 
-/** 加载助手信息 + 历史消息 */
-async function loadChat() {
-  const { data } = await getAssistantById(assistantId)
-  assistantName.value = data.name
+/** 过滤当前助手的会话列表 */
+const filteredConversations = computed(() => {
+  const convs = chatStore.currentAssistantConversations
+  if (!convs || convs.length === 0) return []
 
-  if (!chatStore.getCurrentConversation()) {
-    const cid = Date.now()
-    chatStore.addConversation({
-      id: cid,
-      assistantId,
-      assistantName: assistantName.value,
-      messages: []
+  if (!searchKeyword.value.trim()) return convs
+
+  const keyword = searchKeyword.value.toLowerCase()
+  return convs.filter(c => {
+    const lastMessage = c.messages[c.messages.length - 1]?.content || ''
+    return c.assistantName.toLowerCase().includes(keyword)
+      || lastMessage.toLowerCase().includes(keyword)
+  })
+})
+
+/** 加载助手信息 + 当前会话历史消息 */
+async function loadConversation(convId?: string) {
+  const res = await getAssistantById(assistantId)
+  assistantName.value = res.data.name
+
+  let currentConvId = convId
+
+  if (!currentConvId) {
+    // 新建会话
+    const conv = await chatStore.addConversation(assistantId, assistantName.value)
+    if (!conv) return
+    currentConvId = conv.id
+  }
+
+  // 设置当前助手/会话
+  chatStore.setCurrent(currentConvId, assistantId)
+
+  // 拉取历史消息
+  const historyRes = await getHistory(assistantId, currentConvId)
+  if (Array.isArray(historyRes.data.data)) {
+    historyRes.data.data.forEach((msg: ChatRecord) => {
+      chatStore.addMessage(currentConvId!, msg, assistantId)
     })
-
-    const historyRes = await getHistory(assistantId)
-    if (Array.isArray(historyRes.data.data)) {
-      historyRes.data.data.forEach((msg: ChatRecord) =>
-        chatStore.addMessage(cid, msg)
-      )
-    }
   }
 
   scrollToBottom()
 }
 
-/** WebSocket 连接（流式 + 多助手） */
+/** 建立 WebSocket */
 function connectWS() {
+  if (ws) return // 已连接就不重复创建
+
   ws = new WebSocket(`ws://127.0.0.1:8000/ws/chat/${assistantId}`)
 
-  ws.onopen = () => console.log("✅ WebSocket connected")
+  ws.onopen = () => console.log('✅ WebSocket connected')
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data)
-
-    if (data.type === "chunk") {
+    if (data.type === 'chunk') {
       streamingReply.value += data.content
       scrollToBottom()
     }
-
-    if (data.type === "end") {
-      if (streamingReply.value) {
-        chatStore.addMessage(chatStore.currentConversation!, {
-          role: "assistant",
-          content: streamingReply.value
-        })
-        streamingReply.value = ""
+    if (data.type === 'end') {
+      if (streamingReply.value && chatStore.currentConversationId) {
+        chatStore.addMessage(chatStore.currentConversationId, { role: 'assistant', content: streamingReply.value }, assistantId)
+        streamingReply.value = ''
         scrollToBottom()
       }
     }
-
-    if (data.type === "error") {
+    if (data.type === 'error') {
       ElMessage.error(data.content)
     }
   }
 
-  ws.onclose = () => {
-    console.log("⚠️ WebSocket disconnected, retrying...")
-    setTimeout(connectWS, 1200)
-  }
-
-  ws.onerror = (err) => {
-    console.error("WebSocket error:", err)
-    ws?.close()
-  }
+  ws.onclose = () => console.log('⚠️ WebSocket disconnected')
+  ws.onerror = (err) => console.error('WebSocket error:', err)
 }
 
 /** 发送消息 */
 function send() {
-  if (!input.value.trim() || !ws) return
+  if (!input.value.trim() || !ws || !chatStore.currentConversationId) return
 
-  // 写入 Pinia 用户消息
-  chatStore.addMessage(chatStore.currentConversation!, {
-    role: "user",
-    content: input.value
-  })
+  chatStore.addMessage(chatStore.currentConversationId, { role: 'user', content: input.value }, assistantId)
 
-  // 发送到后端
   ws.send(JSON.stringify({
+    conversation_id: chatStore.currentConversationId,
     message: input.value
   }))
 
-  input.value = ""
-  streamingReply.value = ""
+  input.value = ''
+  streamingReply.value = ''
   scrollToBottom()
 }
 
-/** 新对话 */
-function newChat() {
-  const newId = Date.now()
-  chatStore.addConversation({
-    id: newId,
-    assistantId,
-    assistantName: assistantName.value,
-    messages: []
-  })
-  scrollToBottom()
+/** 新建会话 */
+async function newChat() {
+  await loadConversation()
 }
 
-/** 删除对话 */
-function confirmDelete(id:number) {
-  const conv = chatStore.conversations.find(c => c.id === id)
-  ElMessageBox.confirm(
-    `确定要删除对话「${conv?.assistantName ?? ''}」吗？`,
-    '删除确认',
-    { type:'warning', confirmButtonText:'删除', cancelButtonText:'取消' }
-  ).then(() => {
-    chatStore.deleteConversation(id)
+/** 删除会话 */
+async function confirmDelete(convId: string) {
+  const conv = chatStore.currentAssistantConversations.find(c => c.id === convId)
+  if (!conv) return
+
+  await ElMessageBox.confirm(`确定删除「${conv.assistantName}」吗？`, '删除确认', {
+    type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+  }).then(async () => {
+    await chatStore.deleteConversation(convId, assistantId)
+
+    const nextConv = chatStore.currentAssistantConversations[0]
+    if (nextConv) await loadConversation(nextConv.id)
+    else await newChat()
+
     ElMessage.success('删除成功')
-  }).catch(()=>{})
+  }).catch(() => {})
 }
 
-/** 切换对话 */
-function selectConversation(id:number) {
-  chatStore.setCurrent(id)
-  scrollToBottom()
+/** 切换会话 */
+async function selectConversation(convId: string) {
+  if (convId === chatStore.currentConversationId) return
+  await loadConversation(convId)
 }
 
 function back() {
   router.push('/assistants')
 }
 
-onMounted(() => { loadChat(); connectWS() })
+onMounted(async () => {
+  await loadConversation()
+  connectWS()
+})
 onBeforeUnmount(() => ws?.close())
 </script>
 
 <style scoped>
-/* 保持你现有的布局和样式不变 */
+/* 原样保持布局和样式 */
 .chat-container { display: flex; width: 800px; max-width: 90%; height: 600px; border: 1px solid #ccc; border-radius: 10px; overflow: hidden; box-shadow: 0 0 15px rgba(0,0,0,0.1); background: #fff; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 .chat-sidebar { width: 240px; border-right: 1px solid #ddd; flex-direction: column; padding: 10px; display: flex; box-sizing: border-box; }
 .sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

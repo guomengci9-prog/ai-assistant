@@ -1,6 +1,7 @@
-// api/chat.ts
+// src/api/chat.ts
 import axios from "axios"
 
+// axios 实例（确保 baseURL 正确）
 const api = axios.create({
   baseURL: "http://127.0.0.1:8000/api"
 })
@@ -10,17 +11,23 @@ export interface ChatRecord {
   content: string
 }
 
-/** 获取助手历史记录，用于初始化 Pinia */
-export const getHistory = (assistantId: number) =>
-  api.get(`/chat/history/${assistantId}`)
-
-/** 获取单个助手信息 */
 export const getAssistantById = (assistantId: number) =>
   api.get(`/assistants/${assistantId}`)
 
-/**
- * 注意：发送消息现在前端走 WebSocket，不再使用 HTTP POST
- * 如果你需要保留，可写作备用接口，但前端 send() 方法不调用它
- */
-export const sendMessage = (assistantId: number, msg: string) =>
-  api.post(`/chat/${assistantId}`, { message: msg })
+// 新建会话 -> POST /conversation/{assistant_id}
+export const createConversation = (assistantId: number) =>
+  api.post(`/conversation/${assistantId}`)
+
+// 删除会话 -> DELETE /conversation/{assistant_id}/{conversation_id}
+export const deleteConversation = (assistantId: number, conversationId: string) =>
+  api.delete(`/conversation/${assistantId}/${conversationId}`)
+
+// 获取历史 -> GET /chat/history/{assistant_id}?conversation_id=...
+export const getHistory = (assistantId: number, conversationId: string) =>
+  api.get(`/chat/history/${assistantId}`, { params: { conversation_id: conversationId } })
+
+// 备用 - 非流式发送（/chat/{assistant_id}）
+export const sendMessage = (assistantId: number, message: string, conversationId?: string) =>
+  api.post(`/chat/${assistantId}`, { message, conversation_id: conversationId })
+
+export default api
