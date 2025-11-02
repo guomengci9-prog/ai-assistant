@@ -1,3 +1,4 @@
+// api/chat.ts
 import axios from "axios"
 
 const api = axios.create({
@@ -9,14 +10,17 @@ export interface ChatRecord {
   content: string
 }
 
-//export const getHistory = (assistant_id: number) =>
-  //api.get(`/chat/history/${assistant_id}`)
+/** 获取助手历史记录，用于初始化 Pinia */
+export const getHistory = (assistantId: number) =>
+  api.get(`/chat/history/${assistantId}`)
 
-export const getHistory = (assistantId: number, conversationId: number) =>
-  api.get(`/history/${assistantId}`, {
-    params: { conversationId }
-  })
+/** 获取单个助手信息 */
+export const getAssistantById = (assistantId: number) =>
+  api.get(`/assistants/${assistantId}`)
 
-
-export const sendMessage = (assistant_id: number, msg: string) =>
-  api.post(`/chat/${assistant_id}`, { role: "user", content: msg })
+/**
+ * 注意：发送消息现在前端走 WebSocket，不再使用 HTTP POST
+ * 如果你需要保留，可写作备用接口，但前端 send() 方法不调用它
+ */
+export const sendMessage = (assistantId: number, msg: string) =>
+  api.post(`/chat/${assistantId}`, { message: msg })

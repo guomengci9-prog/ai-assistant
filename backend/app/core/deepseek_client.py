@@ -12,7 +12,7 @@ if not DEEPSEEK_API_KEY:
 
 def stream_chat(messages):
     """
-    流式调用 DeepSeek API，返回生成器，每次 yield 一个 chunk
+    流式调用 DeepSeek API，每次 yield 一个 chunk
     messages: [{"role": "user"/"assistant"/"system", "content": "..."}]
     """
     try:
@@ -46,11 +46,8 @@ def stream_chat(messages):
     except Exception as e:
         yield {"error": str(e)}
 
-# 可选保留同步接口，兼容旧的 chat.py
+# 可选同步接口
 def chat_completion(prompt: str) -> str:
-    """
-    同步调用 DeepSeek，返回完整回复（非流式）
-    """
     messages = [{"role": "user", "content": prompt}]
     result = ""
     for item in stream_chat(messages):
