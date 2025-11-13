@@ -1,66 +1,117 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime
-import hashlib
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.dependencies.auth import get_admin_user
+from app.models.user import User
+from app.utils.security import hash_password
 
 router = APIRouter()
-users_db = {}  # 模拟数据库
+
 
 class UserCreate(BaseModel):
     username: str
     password: str
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     role: str = "user"
 
+
 class UserUpdate(BaseModel):
-    username: Optional[str]
-    email: Optional[str]
-    role: Optional[str]
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
 
-def hash_password(password: str):
-    return hashlib.sha256(password.encode()).hexdigest()
 
-@router.get("/admin/users")
-def list_users():
-    return {"success": True, "data": list(users_db.values())}
+class ResetPasswordBody(BaseModel):
+    new_password: str
 
-@router.post("/admin/users")
-def create_user(user: UserCreate):
-    if user.username in users_db:
-        return {"success": False, "message": "用户名已存在"}
-    users_db[user.username] = {
-        "id": len(users_db) + 1,
+
+def serialize_user(user: User) -> dict:
+    return {
         "username": user.username,
         "email": user.email,
         "role": user.role,
-        "password": hash_password(user.password),
-        "create_time": datetime.now().isoformat()
+        "create_time": user.created_at.isoformat() if user.created_at else None,
     }
-    return {"success": True, "message": "创建成功"}
 
-@router.put("/admin/users/{user_id}")
-def update_user(user_id: int, user: UserUpdate):
-    for u in users_db.values():
-        if u["id"] == user_id:
-            if user.username: u["username"] = user.username
-            if user.email: u["email"] = user.email
-            if user.role: u["role"] = user.role
-            return {"success": True, "message": "修改成功"}
-    return {"success": False, "message": "用户不存在"}
 
-@router.delete("/admin/users/{user_id}")
-def delete_user(user_id: int):
-    for k, u in list(users_db.items()):
-        if u["id"] == user_id:
-            del users_db[k]
-            return {"success": True, "message": "删除成功"}
-    return {"success": False, "message": "用户不存在"}
+@router.get("/admin/users")
+def list_users(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    data = db.query(User).order_by(User.username).all()
+    return {"success": True, "data": [serialize_user(item) for item in data]}
 
-@router.post("/admin/users/{user_id}/reset_password")
-def reset_password(user_id: int, new_password: str = "123456"):
-    for u in users_db.values():
-        if u["id"] == user_id:
-            u["password"] = hash_password(new_password)
-            return {"success": True, "message": "密码已重置"}
-    return {"success": False, "message": "用户不存在"}
+
+@router.post("/admin/users")
+def create_user(
+    payload: UserCreate,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    payload.role = payload.role or "user"
+    if db.get(User, payload.username):
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    if payload.role not in {"user", "admin"}:
+        raise HTTPException(status_code=400, detail="角色不合法")
+    user = User(
+        username=payload.username,
+        password=hash_password(payload.password),
+        email=payload.email,
+        role=payload.role,
+    )
+    db.add(user)
+    db.commit()
+    return {"success": True, "message": "创建成功", "data": serialize_user(user)}
+
+
+@router.put("/admin/users/{username}")
+def update_user(
+    username: str,
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    user = db.get(User, username)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if payload.role and payload.role not in {"user", "admin"}:
+        raise HTTPException(status_code=400, detail="角色不合法")
+    if payload.email is not None:
+        user.email = payload.email
+    if payload.role is not None:
+        user.role = payload.role
+    db.commit()
+    db.refresh(user)
+    return {"success": True, "message": "修改成功", "data": serialize_user(user)}
+
+
+@router.delete("/admin/users/{username}")
+def delete_user(
+    username: str,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    user = db.get(User, username)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    db.delete(user)
+    db.commit()
+    return {"success": True, "message": "删除成功"}
+
+
+@router.post("/admin/users/{username}/reset_password")
+def reset_password(
+    username: str,
+    payload: ResetPasswordBody,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    user = db.get(User, username)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    user.password = hash_password(payload.new_password)
+    db.commit()
+    return {"success": True, "message": "密码已重置"}

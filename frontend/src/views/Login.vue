@@ -3,13 +3,23 @@
     <div class="auth-card">
       <h2 class="title">登录</h2>
 
-      <el-input
-        :key="'account-' + $route.fullPath"
-        v-model="account"
-        placeholder="用户名/邮箱/手机号"
-        autocomplete="off"
-        class="input"
-      />
+      <div class="input-with-action">
+        <el-input
+          :key="'account-' + $route.fullPath"
+          v-model="account"
+          placeholder="用户名/邮箱/手机号"
+          autocomplete="off"
+          class="input"
+        />
+        <el-button
+          v-if="hasLastAccount"
+          text
+          class="clear-account-btn"
+          @click="clearAccount"
+        >
+          切换账号
+        </el-button>
+      </div>
 
       <el-input
         :key="'password-' + $route.fullPath"
@@ -22,8 +32,10 @@
 
       <el-button type="primary" @click="loginHandler" class="btn primary-btn">登录</el-button>
 
-      <p class="switch-link" @click="goRegister">没有账号？去注册</p>
-      <p class="switch-link" @click="goForgotPassword">忘记密码？</p>
+      <div class="link-group">
+        <span @click="goRegister">没有账号？去注册</span>
+        <span @click="goForgotPassword">忘记密码</span>
+      </div>
 
       <p v-if="error" class="error-msg">{{ error }}</p>
     </div>
@@ -31,26 +43,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { login, LoginData } from '../api'
+import { login, type LoginData } from '../api'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
-const account = ref('')
+const authStore = useAuthStore()
+
+const account = ref(authStore.account || '')
 const password = ref('')
 const error = ref('')
 
+const isLoggedIn = computed(() => authStore.isLoggedIn)
+const hasLastAccount = computed(() => Boolean(authStore.account))
+
 onMounted(() => {
-  account.value = ''
-  password.value = ''
-  error.value = ''
+  if (isLoggedIn.value) {
+    router.replace('/assistants')
+  }
 })
 
 async function loginHandler() {
+  if (!account.value.trim() || !password.value) {
+    error.value = '请输入账号和密码'
+    return
+  }
   try {
-    const data: LoginData = { account: account.value, password: password.value }
+    const data: LoginData = { account: account.value.trim(), password: password.value }
     const res = await login(data)
     if (res.data.success) {
+      authStore.setAuth({
+        token: res.data.token || '',
+        account: account.value.trim(),
+        role: res.data.role || 'user',
+      })
       router.push('/assistants')
     } else {
       error.value = res.data.message
@@ -62,6 +89,11 @@ async function loginHandler() {
 
 const goRegister = () => router.push('/register')
 const goForgotPassword = () => router.push('/forgot-password')
+
+function clearAccount() {
+  authStore.clearAuth({ keepAccount: false })
+  account.value = ''
+}
 </script>
 
 <style scoped>
@@ -69,51 +101,69 @@ const goForgotPassword = () => router.push('/forgot-password')
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 100vh;
   background: #f5f6fa;
+  padding: 16px;
 }
+
 .auth-card {
   width: 100%;
-  max-width: 360px;
-  padding: 28px 22px;
+  max-width: 320px;
+  padding: 24px 18px;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
 }
+
 .title {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   font-weight: 600;
   font-size: 20px;
 }
+
 .input {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
+
+.input-with-action {
+  position: relative;
+}
+
+.clear-account-btn {
+  position: absolute;
+  right: 4px;
+  top: 12px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: #409eff;
+}
+
 .btn {
   width: 100%;
   margin-top: 4px;
   padding: 12px;
   font-size: 15px;
   border-radius: 10px;
-  transition: .2s;
 }
-.primary-btn:hover {
-  filter: brightness(0.95);
-}
-.switch-link {
-  text-align: center;
-  margin-top: 12px;
+
+.link-group {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  font-size: 13px;
   color: #409eff;
   cursor: pointer;
-  font-size: 14px;
 }
-.switch-link:hover {
+
+.link-group span:hover {
   text-decoration: underline;
 }
+
 .error-msg {
-  color: red;
+  color: #ff4d4f;
   text-align: center;
   margin-top: 10px;
   font-size: 13px;

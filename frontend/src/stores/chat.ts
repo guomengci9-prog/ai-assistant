@@ -1,6 +1,6 @@
 // stores/chat.ts
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { ChatRecord } from '../types'
 import api from '@/api/chat'
 
@@ -16,9 +16,36 @@ export interface AssistantConversations {
   [assistantId: string]: Conversation[]
 }
 
+function enforceSingleOpening(messages: ChatRecord[]) {
+  const result: ChatRecord[] = []
+  let openingAdded = false
+  for (const msg of messages) {
+    if (msg.message_type === 'opening') {
+      if (openingAdded) continue
+      openingAdded = true
+    }
+    result.push(msg)
+  }
+  return result
+}
+
 export const useChatStore = defineStore('chat', () => {
   // 每个助手的会话列表（键为字符串）
-  const conversations = ref<AssistantConversations>({})
+  const STORAGE_KEY = 'chat_conversations_v1'
+  function loadStoredConversations(): AssistantConversations {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (err) {
+      console.warn('Failed to load stored conversations', err)
+      return {}
+    }
+  }
+
+  const conversations = ref<AssistantConversations>(loadStoredConversations())
 
   // 当前选中会话（string），以及当前助手 id（number | null）
   const currentConversationId = ref<string | null>(null)
@@ -57,21 +84,33 @@ export const useChatStore = defineStore('chat', () => {
   ) {
     try {
       let id = convId
+      let openingMessage: string | undefined
       if (!id) {
         // 调后端创建并获取 conversation_id
         const res = await api.post(`/conversation/${assistantId}`)
         id = res.data.conversation_id
+        openingMessage = res.data.opening_message
       }
 
       if (!id) {
         throw new Error('没有获得 conversation_id')
       }
 
+      let initialMessages = messages ? enforceSingleOpening([...messages]) : []
+      if (!messages && openingMessage) {
+        initialMessages = enforceSingleOpening([{
+          role: 'assistant',
+          content: openingMessage,
+          hideName: true,
+          message_type: 'opening'
+        }])
+      }
+
       const conv: Conversation = {
         id,
         assistantId,
         assistantName,
-        messages: messages ?? []
+        messages: initialMessages
       }
 
       const key = String(assistantId)
@@ -79,9 +118,28 @@ export const useChatStore = defineStore('chat', () => {
         conversations.value[key] = []
       }
 
-      // 防止重复 push（幂等）
-      const exists = conversations.value[key].some(c => c.id === id)
-      if (!exists) conversations.value[key].push(conv)
+      const list = conversations.value[key]
+      const hasUserMessages = (item: Conversation) => item.messages.some(msg => msg.role === 'user')
+      if (!messages) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          const item = list[i]
+          if (item.id !== id && !hasUserMessages(item)) {
+            list.splice(i, 1)
+          }
+        }
+      }
+      const existIndex = list.findIndex(c => c.id === id)
+      if (existIndex !== -1) {
+        // 更新现有会话信息
+        const existing = list.splice(existIndex, 1)[0]
+        existing.assistantName = assistantName
+        if (messages && messages.length) {
+          existing.messages = messages
+        }
+        list.unshift(existing)
+      } else {
+        list.unshift(conv)
+      }
 
       // 设置当前
       currentConversationId.value = id
@@ -120,13 +178,47 @@ export const useChatStore = defineStore('chat', () => {
     const convs = conversations.value[key]
     if (!Array.isArray(convs)) return
     const conv = convs.find(c => c.id === convId)
-    if (conv) conv.messages.push(msg)
+    if (!conv) return
+    if (msg.message_type === 'opening') {
+      const hasOpening = conv.messages.some(existing => existing.message_type === 'opening')
+      if (hasOpening) return
+    }
+    conv.messages.push(msg)
+  }
+
+  function setConversationMessages(convId: string, assistantId: number, messages: ChatRecord[]) {
+    const key = String(assistantId)
+    const convs = conversations.value[key]
+    if (!Array.isArray(convs)) return
+    const conv = convs.find(c => c.id === convId)
+    if (!conv) return
+    conv.messages = enforceSingleOpening([...messages])
   }
 
   /** 设置当前会话（本地） */
   function setCurrent(convId: string, assistantId: number) {
     currentConversationId.value = convId
     currentAssistantId.value = assistantId
+  }
+
+  function getConversationsByAssistant(assistantId: number) {
+    const key = String(assistantId)
+    const convs = conversations.value[key]
+    return Array.isArray(convs) ? convs : []
+  }
+
+  if (typeof window !== 'undefined') {
+    watch(
+      conversations,
+      (value) => {
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
+        } catch (err) {
+          console.warn('Failed to persist conversations', err)
+        }
+      },
+      { deep: true },
+    )
   }
 
   return {
@@ -139,6 +231,8 @@ export const useChatStore = defineStore('chat', () => {
     addConversation,
     deleteConversation,
     addMessage,
-    setCurrent
+    setConversationMessages,
+    setCurrent,
+    getConversationsByAssistant
   }
 })

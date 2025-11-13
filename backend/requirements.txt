@@ -4,3 +4,5 @@ pydantic
 requests
 python-dotenv
 sqlalchemy
+email-validator
+pypdf

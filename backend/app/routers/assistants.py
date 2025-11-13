@@ -1,63 +1,59 @@
-# app/routers/assistants.py
-from fastapi import APIRouter
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field, ConfigDict
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.services import assistants as assistant_service
 
 router = APIRouter()
 
-assistants_db = [
-    {
-        "id": 1,
-        "name": "文档助手",
-        "icon": "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
-        "description": "帮你解读 PDF、手册与文档内容",
-        "defaultPrompt": "你是一个专业的文档分析助手，擅长解析 PDF、手册和技术文档。",
-        "update_time": datetime.now().isoformat(),
-    },
-    {
-        "id": 2,
-        "name": "翻译助手",
-        "icon": "https://cdn-icons-png.flaticon.com/512/6073/6073873.png",
-        "description": "支持中英双向智能翻译",
-        "defaultPrompt": "你是一个专业的翻译助手，回答准确自然。",
-        "update_time": datetime.now().isoformat(),
-    },
-    {
-        "id": 3,
-        "name": "科研问答助手",
-        "icon": "https://cdn-icons-png.flaticon.com/512/9018/9018883.png",
-        "description": "适用于学术论文、科研答疑",
-        "defaultPrompt": "你是一个是科研专家，擅长学术研究与论文解释。",
-        "update_time": datetime.now().isoformat(),
-    },
-]
 
-
-# -------------------------------
-# 数据模型
-# -------------------------------
 class Assistant(BaseModel):
     id: int
     name: str
     icon: str
     description: str
-    defaultPrompt: Optional[str] = None 
+    prompt_content: Optional[str] = None
+    system_prompt: Optional[str] = None
+    scene_prompt: Optional[str] = None
+    user_prefill: Optional[str] = None
+    opening_message: Optional[str] = None
+    default_prompt: Optional[str] = Field(default=None, alias="defaultPrompt")
+    model_parameters: Dict[str, Any] = Field(default_factory=dict)
+    knowledge_ids: List[int] = Field(default_factory=list)
     update_time: Optional[str] = None
 
-# -------------------------------
-# 获取助手列表
-# -------------------------------
-@router.get("/assistants", response_model=List[Assistant])
-def get_assistants():
-    return assistants_db
+    model_config = ConfigDict(populate_by_name=True)
 
-# -------------------------------
-# 根据ID获取助手详情
-# -------------------------------
+
+def _normalize_assistant(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """补充 defaultPrompt 字段"""
+    result = dict(raw)
+    result.setdefault("prompt_content", "")
+    result.setdefault("system_prompt", "")
+    result.setdefault("scene_prompt", "")
+    result.setdefault("user_prefill", "")
+    result.setdefault("opening_message", "")
+    result.setdefault("model_parameters", {})
+    result.setdefault("knowledge_ids", [])
+    if "defaultPrompt" not in result:
+        result["defaultPrompt"] = result.get("prompt_content", "")
+    return result
+
+
+@router.get("/assistants", response_model=List[Assistant])
+def get_assistants(db: Session = Depends(get_db)):
+    assistant_service.seed_assistants(db)
+    data = assistant_service.list_assistants(db)
+    return [_normalize_assistant(item) for item in data]
+
+
 @router.get("/assistants/{assistant_id}", response_model=Assistant)
-def get_assistant_by_id(assistant_id: int):
-    for a in assistants_db:
-        if a["id"] == assistant_id:
-            return a
-    return {"detail": "Assistant not found"}
+def get_assistant_by_id(assistant_id: int, db: Session = Depends(get_db)):
+    assistant_service.seed_assistants(db)
+    assistant = assistant_service.get_assistant(db, assistant_id)
+    if not assistant:
+        raise HTTPException(status_code=404, detail="Assistant not found")
+    return _normalize_assistant(assistant)

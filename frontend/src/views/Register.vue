@@ -13,7 +13,7 @@
       <el-input
         v-model="password"
         type="password"
-        placeholder="密码（6-18位，字母+数字）"
+        placeholder="密码（6-18 位，字母+数字）"
         autocomplete="new-password"
         class="input"
       />
@@ -32,8 +32,8 @@
         class="input"
       />
 
-      <el-button type="primary" @click="registerHandler" class="btn primary-btn">
-        注册
+      <el-button type="primary" class="btn primary-btn" @click="registerHandler">
+        注册并登录
       </el-button>
 
       <p class="switch-link" @click="goLogin">已有账号？去登录</p>
@@ -46,7 +46,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { register, RegisterData } from '../api'
+import { register, type RegisterData } from '../api'
 
 const router = useRouter()
 const username = ref('')
@@ -63,13 +63,8 @@ onMounted(() => {
   error.value = ''
 })
 
-// 密码正则：6-18位，包含字母和数字
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,18}$/
-
-// 邮箱正则
 const emailRegex = /^[\w.-]+@[\w.-]+\.\w{2,}$/
-
-// 手机正则（简单匹配 11 位数字）
 const phoneRegex = /^\d{11}$/
 
 async function registerHandler() {
@@ -78,7 +73,7 @@ async function registerHandler() {
     return
   }
   if (!passwordRegex.test(password.value)) {
-    error.value = '密码必须6-18位，包含字母和数字'
+    error.value = '密码需 6-18 位且包含字母和数字'
     return
   }
   if (email.value && !emailRegex.test(email.value)) {
@@ -92,7 +87,7 @@ async function registerHandler() {
 
   try {
     const data: RegisterData = {
-      username: username.value,
+      username: username.value.trim(),
       password: password.value,
       email: email.value || undefined,
       phone: phone.value || undefined
@@ -100,8 +95,8 @@ async function registerHandler() {
 
     const res = await register(data)
     if (res.data.success) {
-      error.value = '✅ 注册成功，正在跳转...'
-      setTimeout(() => router.push('/login'), 800)
+      error.value = '🎉 注册成功，正在跳转...'
+      setTimeout(() => router.push('/login'), 700)
     } else {
       error.value = res.data.message
     }
@@ -118,39 +113,41 @@ const goLogin = () => router.push('/login')
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 100vh;
   background: #f5f6fa;
+  padding: 16px;
 }
+
 .auth-card {
   width: 100%;
-  max-width: 360px;
-  padding: 28px 22px;
+  max-width: 320px;
+  padding: 24px 18px;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
 }
+
 .title {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   font-weight: 600;
   font-size: 20px;
 }
+
 .input {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
+
 .btn {
   width: 100%;
-  margin-top: 4px;
   padding: 12px;
   font-size: 15px;
   border-radius: 10px;
-  transition: .2s;
+  margin-top: 4px;
 }
-.primary-btn:hover {
-  filter: brightness(0.95);
-}
+
 .switch-link {
   text-align: center;
   margin-top: 12px;
@@ -158,13 +155,15 @@ const goLogin = () => router.push('/login')
   cursor: pointer;
   font-size: 14px;
 }
+
 .switch-link:hover {
   text-decoration: underline;
 }
+
 .error-msg {
-  color: red;
+  color: #ff4d4f;
   text-align: center;
-  margin-top: 10px;
   font-size: 13px;
+  margin-top: 12px;
 }
 </style>
